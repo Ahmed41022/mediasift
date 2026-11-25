@@ -83,8 +83,9 @@ def test_a_failed_flush_is_not_retried_and_closes_the_source() -> None:
         calls.append(batch)
         raise OSError("disk full")
 
+    results = source()  # held here, so that only an explicit close ends it
     with pytest.raises(OSError, match="disk full"):
-        batched_commit(source(), flush, size=2, max_seconds=1e9)
+        batched_commit(results, flush, size=2, max_seconds=1e9)
     assert calls == [[0, 1]]
     assert closed
 

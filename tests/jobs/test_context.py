@@ -14,7 +14,7 @@ from mediasift.jobs.context import CancelToken, JobContext, Progress
 
 class Clock:
     def __init__(self) -> None:
-        self.now = 1000.0
+        self.now = 0.0  # so that only a forced delivery gets through at the start
 
     def __call__(self) -> float:
         return self.now
@@ -98,7 +98,7 @@ def test_rate_limit() -> None:
             clock.now += 0.001  # ten seconds in all
             stage.advance()
     assert 90 <= len(seen) <= 102
-    assert seen[0] == (1000.0, 0)
+    assert seen[0] == (0.0, 0)
     assert seen[-1][1] == 10_000
     gaps = [b[0] - a[0] for a, b in itertools.pairwise(seen[:-1])]
     assert min(gaps) >= 0.1
