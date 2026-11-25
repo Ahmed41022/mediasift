@@ -1,0 +1,1 @@
+"""Reading metadata and pixels."""
