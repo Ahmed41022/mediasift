@@ -27,6 +27,7 @@ import numpy as np
 from PIL import Image, TiffImagePlugin
 
 from mediasift.core.errors import ReaderError
+from mediasift.core.paths import fs_path
 from mediasift.core.types import MediaMetadata
 from mediasift.readers.image import (
     DECODE_ERRORS,
@@ -120,7 +121,7 @@ class TiffExif:
 def _open_file(path: Path) -> Iterator[IO[bytes]]:
     """Open ``path`` for LibRaw. Handing LibRaw a file object keeps non-ASCII paths safe."""
     try:
-        fp = path.open("rb")
+        fp = Path(fs_path(path)).open("rb")  # noqa: SIM115 - closed below
     except OSError as exc:
         raise ReaderError(f"cannot open the file: {exc}", kind="io") from exc
     with fp:
@@ -270,6 +271,7 @@ class RawReader:
     def _finish_preview(
         image: Image.Image, max_side: int, shown: tuple[int, int], raw_orientation: int
     ) -> Image.Image | None:
+        check_pixels(image.size, DEFAULT_MAX_PIXELS)
         longest = max(image.size)
         if longest < min(max_side, max(shown)):
             return None  # too small to stand in for the picture

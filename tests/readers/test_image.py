@@ -555,10 +555,31 @@ def test_missing_file_and_directory_are_io_errors(tmp_path: Path) -> None:
 def test_hand_written_header_claiming_100k_by_100k(tmp_path: Path) -> None:
     path = tmp_path / "bomb.png"
     path.write_bytes(png_claiming(100_000, 100_000))
-    for call in (READER.read_metadata, lambda p: READER.load_image(p, 64)):
-        with pytest.raises(ReaderError) as info:
-            call(path)
-        assert info.value.kind == "too_large"
+    assert READER.read_metadata(path).width == 100_000  # from the header alone
+    with pytest.raises(ReaderError) as info:
+        READER.load_image(path, 64)
+    assert info.value.kind == "too_large"
+
+
+def test_a_200_megapixel_phone_photo_is_not_a_bomb(tmp_path: Path) -> None:
+    path = tmp_path / "phone.jpg"
+    path.write_bytes(jpeg_claiming(16_320, 12_240))
+    assert READER.read_metadata(path).width == 16_320
+    with pytest.raises(ReaderError) as info:  # only because there are no pixels behind it
+        READER.load_image(path, 64)
+    assert info.value.kind != "too_large"
+
+
+def test_png_metadata_never_decodes_the_pixels(
+    tmp_path: Path, small_scene: Image.Image, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = images.save_png(small_scene, tmp_path / "a.png")
+
+    def fail(*args: object) -> None:
+        raise AssertionError("decoded")
+
+    monkeypatch.setattr(ImageFile.ImageFile, "load", fail)
+    assert READER.read_metadata(path).width == small_scene.width
 
 
 def test_our_limit_is_checked_before_any_decoding(tmp_path: Path, small_scene: Image.Image) -> None:

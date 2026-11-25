@@ -25,6 +25,7 @@ from typing import IO, Any
 from PIL import Image
 
 from mediasift.core.errors import ReaderError
+from mediasift.core.paths import fs_path
 from mediasift.core.types import MediaMetadata
 from mediasift.readers.image import (
     DECODE_ERRORS,
@@ -113,7 +114,7 @@ def _meta_has_transform(payload: bytes) -> bool:
 @contextmanager
 def _open_file(path: Path) -> Iterator[IO[bytes]]:
     try:
-        fp = path.open("rb")
+        fp = Path(fs_path(path)).open("rb")  # noqa: SIM115 - closed below
     except OSError as exc:
         raise ReaderError(f"cannot open the file: {exc}", kind="io") from exc
     with fp:

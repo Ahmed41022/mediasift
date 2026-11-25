@@ -6,13 +6,9 @@ about the requested size. Doing that once keeps the three readers consistent.
 
 Decisions worth knowing:
 
-* Nothing here changes Pillow's global state (``MAX_IMAGE_PIXELS``,
-  ``LOAD_TRUNCATED_IMAGES``). The pixel limit is our own and is checked on the
-  header, before any decoding. Pillow's own hard limit (twice its
-  ``MAX_IMAGE_PIXELS``, about 179 megapixels) still fires first and is reported as
-  ``too_large`` as well.
-* Pillow reports a *warning* between its soft and hard limit. ``warnings.catch_warnings``
-  is not thread-safe, so the warning category is silenced once, at import.
+* Pillow's own pixel limit is switched off, once, at import: it would refuse ordinary
+  200-megapixel phone photos. Our own limit replaces it and is checked on the header,
+  before anything is decoded, so every image must be opened through these readers.
 * Files are opened through our own file object and closed by a ``with`` block, so a
   failed read never leaves the file locked (Windows refuses to rename a locked file).
 """
@@ -37,10 +33,11 @@ import numpy as np
 from PIL import Image, ImageCms, UnidentifiedImageError
 
 from mediasift.core.errors import ReaderError
+from mediasift.core.paths import fs_path
 from mediasift.core.types import MediaMetadata
 
 # Process-wide, set once and never changed again: safe to read from any thread.
-warnings.filterwarnings("ignore", category=Image.DecompressionBombWarning)
+Image.MAX_IMAGE_PIXELS = None
 # Pillow reports damaged EXIF and TIFF tags as UserWarning; a bulk scan needs no noise.
 warnings.filterwarnings("ignore", category=UserWarning, module=r"PIL\.")
 
@@ -136,7 +133,7 @@ def open_image(path: Path) -> Iterator[Image.Image]:
     errors that happen later propagate unchanged for :func:`translate_decode_error`.
     """
     try:
-        fp = path.open("rb")
+        fp = Path(fs_path(path)).open("rb")  # noqa: SIM115 - closed below
     except OSError as exc:
         raise ReaderError(f"cannot open the file: {exc}", kind="io") from exc
     with fp:
@@ -303,6 +300,10 @@ def parse_exif(exif: ExifSource | None) -> ExifFields:
 
 def pillow_exif(im: Image.Image) -> ExifSource | None:
     """The image's EXIF block, or None when Pillow cannot parse it."""
+    # A PNG may hold EXIF after its pixels, and Pillow decodes the whole picture to look
+    # for it there. Metadata must stay cheap, and safe for any size: only look before.
+    if im.format == "PNG" and not {"exif", "Raw profile type exif"} & set(im.info):
+        return None
     return _attempt(lambda: cast(ExifSource, im.getexif()), None)
 
 
