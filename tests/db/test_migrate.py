@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import os
 import sqlite3
+import subprocess
+import sys
+import zipfile
 from pathlib import Path
 
 import pytest
 
+import mediasift
 from mediasift.core.errors import ExitCode, LibraryError, MigrationError, SchemaTooNew
 from mediasift.db import migrate
 from mediasift.db.connection import BACKUP_FOLDER, DATABASE_FILE, Database
@@ -88,12 +93,12 @@ def test_no_upgrade_without_a_backup(library: Path, monkeypatch: pytest.MonkeyPa
 @pytest.mark.parametrize(
     "sql",
     [
-        "CREATE TABLE b (x); INSERT INTO a VALUES ('lost'); INSERT INTO nowhere VALUES (1);",
-        "CREATE TABLE b (x); INSERT INTO a VALUES ('lost'); SELEKT 1",
-        "CREATE TABLE b (x); DELETE FROM a; COMMIT; INSERT INTO nowhere VALUES (1);",
-        "CREATE TABLE b (x); DELETE FROM a; /* x */ -- y\n end;",
-        "CREATE TABLE b (x); DROP TABLE a; ROLLBACK;",
-        "CREATE TABLE b (id PRIMARY KEY); CREATE TABLE d (r REFERENCES b (id));"
+        "CREATE TABLE z (x); INSERT INTO a VALUES ('lost'); INSERT INTO nowhere VALUES (1);",
+        "CREATE TABLE z (x); INSERT INTO a VALUES ('lost'); SELEKT 1",
+        "CREATE TABLE z (x); DELETE FROM a; COMMIT; INSERT INTO nowhere VALUES (1);",
+        "CREATE TABLE z (x); DELETE FROM a; /* x */ -- y\n end;",
+        "CREATE TABLE z (x); DROP TABLE a; ROLLBACK;",
+        "CREATE TABLE z (id PRIMARY KEY); CREATE TABLE d (r REFERENCES z (id));"
         "INSERT INTO d VALUES (9);",
     ],
 )
@@ -200,6 +205,25 @@ def test_split_statements() -> None:
     assert parts[1] == "INSERT INTO t VALUES ('it''s; fine');"
     assert parts[2].endswith("END;")
     assert list(split_statements("-- nothing; here\n/* at all; */ ")) == []
+
+
+def test_migrations_load_from_a_zip(tmp_path: Path) -> None:
+    """They are package data, not files beside the code."""
+    source = Path(mediasift.__file__).parent
+    archive = tmp_path / "package.zip"
+    with zipfile.ZipFile(archive, "w") as file:
+        for item in [*source.rglob("*.py"), *source.rglob("*.sql")]:
+            file.write(item, Path("mediasift") / item.relative_to(source))
+    code = "from mediasift.db.migrate import load_migrations as l; print(len(l()), l()[0].checksum)"
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        env={**os.environ, "PYTHONPATH": str(archive)},
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    shipped = load_migrations()
+    assert result.stdout.split() == [str(len(shipped)), shipped[0].checksum]
 
 
 # --- what the schema guarantees ---
