@@ -206,29 +206,31 @@ def test_a_file_changed_after_hashing_is_left_out(
     for name in ("a.jpg", "b.jpg", "c.jpg"):
         write(root.path / name, data)
     lib.index(root)
-    target = root.path / "b.jpg"
+    # Files are hashed in id order, which follows the folder listing, not the names.
+    first, middle, last_file = sorted(lib.records(root).values(), key=lambda r: r.id)
+    target = middle.path
 
-    def change_b_after_its_hashes(kind: str, path: Path) -> None:
-        # Files are hashed in id order: when c's last hash starts, b's is done. Change b.
+    def change_middle_after_its_hashes(kind: str, path: Path) -> None:
+        # When the last file's last hash starts, the middle one's are done. Change it.
         last = "partial" if size <= WHOLE_LIMIT else "full"
-        if kind == last and path.name == "c.jpg":
+        if kind == last and path.name == last_file.path.name:
             before = target.stat().st_mtime_ns
             target.write_bytes(bytes(size))
             # Coarse clocks can give the rewrite the same time; a same-size rewrite within one
             # tick is undetectable here by design (actions hash again), so make it visible.
             os.utime(target, ns=(before + 2_000_000_000, before + 2_000_000_000))
 
-    calls.before = change_b_after_its_hashes
+    calls.before = change_middle_after_its_hashes
     result = match(lib, workers=1)
+    kept = group(size, first.path.name, last_file.path.name)
     assert target.read_bytes() == bytes(size)
-    assert lib.groups() == {group(size, "a.jpg", "c.jpg")}
-    b = lib.records(root)["b.jpg"].id
-    assert result.check.changed == result.changed == {b}
+    assert lib.groups() == {kept}
+    assert result.check.changed == result.changed == {middle.id}
     assert [i.kind for i in result.issues] == ["changed"]
     # Its hash, valid for the index but not for the disk, keeps it out of later runs too.
     calls.before = None
-    assert match(lib).changed == {b}
-    assert lib.groups() == {group(size, "a.jpg", "c.jpg")}
+    assert match(lib).changed == {middle.id}
+    assert lib.groups() == {kept}
 
 
 @pytest.mark.parametrize("how", ["grow", "truncate", "replace"])
