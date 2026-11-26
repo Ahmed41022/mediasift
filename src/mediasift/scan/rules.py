@@ -23,11 +23,8 @@ from dataclasses import dataclass
 from mediasift.core import paths
 from mediasift.core.config import ScanSettings
 from mediasift.core.errors import ConfigError
-from mediasift.core.paths import StrPath
+from mediasift.core.paths import QUARANTINE_FOLDER, StrPath
 from mediasift.core.types import Root
-
-# The folder the quarantine backend keeps inside a root.
-QUARANTINE_FOLDER = ".mediasift-quarantine"
 
 # Compared without case on every root: nothing in these is ever part of a library.
 _NEVER = frozenset(
