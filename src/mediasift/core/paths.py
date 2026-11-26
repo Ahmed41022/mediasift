@@ -19,6 +19,9 @@ from mediasift.core.types import FileSignature
 
 StrPath = str | os.PathLike[str]
 
+# Where removed files are kept, directly inside each root. The scanner skips it.
+QUARANTINE_FOLDER = ".mediasift-quarantine"
+
 _INT64_MAX = 2**63 - 1
 _UINT64 = 2**64
 
