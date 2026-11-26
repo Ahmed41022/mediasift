@@ -212,7 +212,11 @@ def test_a_file_changed_after_hashing_is_left_out(
         # Files are hashed in id order: when c's last hash starts, b's is done. Change b.
         last = "partial" if size <= WHOLE_LIMIT else "full"
         if kind == last and path.name == "c.jpg":
+            before = target.stat().st_mtime_ns
             target.write_bytes(bytes(size))
+            # Coarse clocks can give the rewrite the same time; a same-size rewrite within one
+            # tick is undetectable here by design (actions hash again), so make it visible.
+            os.utime(target, ns=(before + 2_000_000_000, before + 2_000_000_000))
 
     calls.before = change_b_after_its_hashes
     result = match(lib, workers=1)
